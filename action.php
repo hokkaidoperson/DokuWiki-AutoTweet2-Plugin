@@ -67,18 +67,21 @@ class action_plugin_autotweet2 extends DokuWiki_Action_Plugin {
 
         if (strpos($message, '###PAGEURL###') === FALSE) $message .= ' ' . $pageurl; else $message = str_replace('###PAGEURL###', $pageurl, $message);
 
+        // Insert a space after "@" not to violent the Twitter rule that prohibits "automated @ tweets"
+        $message = str_replace('@', '@ ', $message);  // one-byte @
+        $message = str_replace('＠', '＠ ', $message);  // two-byte ＠
 
         // Copied and adoped from the reference above
         //
-        // パラメータA (リクエストのオプション)
+        // Parameter A (the option of the request)
         $params_a = array(
             'status' => $message ,
         ) ;
 
-        // キーを作成する (URLエンコードする)
+        // Make a key (URL encode)
         $signature_key = rawurlencode( $api_secret ) . '&' . rawurlencode( $access_token_secret ) ;
 
-        // パラメータB (署名の材料用)
+        // Parameter B (ingredients of the signature)
         $params_b = array(
             'oauth_token' => $access_token ,
             'oauth_consumer_key' => $api_key ,
@@ -88,73 +91,81 @@ class action_plugin_autotweet2 extends DokuWiki_Action_Plugin {
             'oauth_version' => '1.0' ,
         ) ;
 
-        // パラメータAとパラメータBを合成してパラメータCを作る
+        // Make parameter C by merging A and B
         $params_c = array_merge( $params_a , $params_b ) ;
 
-        // 連想配列をアルファベット順に並び替える
+        // Sort the associative array in alphabetical order
         ksort( $params_c ) ;
 
-        // パラメータの連想配列を[キー=値&キー=値...]の文字列に変換する
+        // Convert the associative array of parameters into the string [key=value&key=value...]
         $request_params = http_build_query( $params_c , '' , '&' ) ;
 
-        // 一部の文字列をフォロー
+        // Follow some characters
         $request_params = str_replace( array( '+' , '%7E' ) , array( '%20' , '~' ) , $request_params ) ;
 
-        // 変換した文字列をURLエンコードする
+        // URL-encode the converted string
         $request_params = rawurlencode( $request_params ) ;
 
-        // リクエストメソッドをURLエンコードする
-        // ここでは、URL末尾の[?]以下は付けないこと
+        // URL-encode the request method
+        // In this time, it sholdn't include [?] in the last of the URL and after
         $encoded_request_method = rawurlencode( $request_method ) ;
          
-        // リクエストURLをURLエンコードする
+        // URL-encode the request URL
         $encoded_request_url = rawurlencode( $request_url ) ;
          
-        // リクエストメソッド、リクエストURL、パラメータを[&]で繋ぐ
+        // Merge the request method, the request URL, and the parameters by [&]
         $signature_data = $encoded_request_method . '&' . $encoded_request_url . '&' . $request_params ;
 
-        // キー[$signature_key]とデータ[$signature_data]を利用して、HMAC-SHA1方式のハッシュ値に変換する
+        // Using the key [$signature_key] and the data [$signature_data], make a HMAC-SHA1 type hash value
         $hash = hash_hmac( 'sha1' , $signature_data , $signature_key , TRUE ) ;
 
-        // base64エンコードして、署名[$signature]が完成する
+        // Base64-encode, and the [$signature] is ready
         $signature = base64_encode( $hash ) ;
 
-        // パラメータの連想配列、[$params]に、作成した署名を加える
+        // Add the signature to the associative array of the data [$params]
         $params_c['oauth_signature'] = $signature ;
 
-        // パラメータの連想配列を[キー=値,キー=値,...]の文字列に変換する
+        // Convert the associative array of the parameter into the string [key=value&key=value...]
         $header_params = http_build_query( $params_c , '' , ',' ) ;
 
-        // リクエスト用のコンテキスト
+        // Context for the request
         $context = array(
             'http' => array(
-                'method' => $request_method , // リクエストメソッド
-                'header' => array(			  // ヘッダー
+                'method' => $request_method , // Request method
+                'header' => array(			  // Header
                     'Authorization: OAuth ' . $header_params ,
                 ) ,
             ) ,
         ) ;
 
-        // オプションがある場合、コンテキストにPOSTフィールドを作成する
+        // If there is an option, make a POST field into the context
         if ( $params_a ) {
             $context['http']['content'] = http_build_query( $params_a ) ;
         }
 
-        // cURLを使ってリクエスト
+        // Request by using cURL
         $this->curl = curl_init() ;
-        curl_setopt( $this->curl, CURLOPT_URL , $request_url ) ;	// リクエストURL
-        curl_setopt( $this->curl, CURLOPT_HEADER, true ) ;	// ヘッダーを取得
-        curl_setopt( $this->curl, CURLOPT_CUSTOMREQUEST, $context['http']['method'] ) ;	// メソッド
-        curl_setopt( $this->curl, CURLOPT_SSL_VERIFYPEER, false ) ;	// 証明書の検証を行わない
-        curl_setopt( $this->curl, CURLOPT_RETURNTRANSFER, true ) ;	// curl_execの結果を文字列で返す
-        curl_setopt( $this->curl, CURLOPT_HTTPHEADER, $context['http']['header'] ) ;	// ヘッダー
+        curl_setopt( $this->curl, CURLOPT_URL , $request_url ) ;	// Request URL
+        curl_setopt( $this->curl, CURLOPT_HEADER, true ) ;	// Get the header
+        curl_setopt( $this->curl, CURLOPT_CUSTOMREQUEST, $context['http']['method'] ) ;	// Method
+        curl_setopt( $this->curl, CURLOPT_SSL_VERIFYPEER, false ) ;	// Don't verify the certificate
+        curl_setopt( $this->curl, CURLOPT_RETURNTRANSFER, true ) ;	// Return the result of the curl_exec with a string
+        curl_setopt( $this->curl, CURLOPT_HTTPHEADER, $context['http']['header'] ) ;	// Header
         if( isset( $context['http']['content'] ) && !empty( $context['http']['content'] ) ) {
-            curl_setopt( $this->curl, CURLOPT_POSTFIELDS, $context['http']['content'] ) ;	// リクエストボディ
+            curl_setopt( $this->curl, CURLOPT_POSTFIELDS, $context['http']['content'] ) ;	// Request body
         }
-        curl_setopt( $this->curl, CURLOPT_TIMEOUT, 5 ) ;	// タイムアウトの秒数
+        curl_setopt( $this->curl, CURLOPT_TIMEOUT, 5 ) ;	// Timeout seconds
         $res1 = curl_exec( $this->curl ) ;
         $res2 = curl_getinfo( $this->curl ) ;
         curl_close( $this->curl ) ;
+
+        $json = substr( $res1, $res2['header_size'] ) ;	// Got data (such as JSON)
+        $header = substr( $res1, 0, $res2['header_size'] ) ;	// Response header
+
+        if ($this->getConf('debug') and auth_ismanager()) {
+            msg('[Debug] Body(JSON): ' . $json);
+            msg('[Debug] Response header: ' . $header);
+        }
 
     }
 

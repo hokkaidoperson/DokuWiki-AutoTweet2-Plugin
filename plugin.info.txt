@@ -1,7 +1,7 @@
 base autotweet2
 author HokkaidoPerson
 email dosankomali@yahoo.co.jp
-date 2018-07-02
+date 2018-08-29
 name AutoTweet 2 plugin
 desc Post the information of changes to Twitter.
 url http://www.dokuwiki.org/plugin:autotweet2
