@@ -63,6 +63,21 @@ class action_plugin_autotweet2 extends DokuWiki_Action_Plugin {
         $message = str_replace('###TYPE###', $edittype, $message);
         $message = str_replace('###SUMMARY###', $event->data['summary'], $message);
 
+        if (!isset($_SERVER['REMOTE_USER'])) {
+            switch ($this->getConf('guestIP')) {
+            case 'show': $message = str_replace('###EDITOR###', $_SERVER['REMOTE_ADDR'], $message);
+                break;
+            case 'alt' :
+                if(!plugin_isdisabled('hidingip')) {
+                    $hidingip = plugin_load('helper', 'hidingip');
+                    $message = str_replace('###EDITOR###', $hidingip->altText(), $message);
+                    break;
+                }
+                // Else, fall through
+            default    : $message = str_replace('###EDITOR###', '', $message);
+            }
+        } else $message = str_replace('###EDITOR###', userlink(null, true), $message);
+
         $pageurl = wl($savingid, '', TRUE);
 
         if (strpos($message, '###PAGEURL###') === FALSE) $message .= ' ' . $pageurl; else $message = str_replace('###PAGEURL###', $pageurl, $message);
